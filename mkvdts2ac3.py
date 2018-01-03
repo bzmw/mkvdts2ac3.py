@@ -114,6 +114,7 @@ import shutil
 import hashlib
 import textwrap
 import errno
+import stat
 
 version = "1.1"
 
@@ -123,232 +124,56 @@ nzbget = False
 # create parser
 parser = argparse.ArgumentParser(description='convert matroska (.mkv) video files audio portion from dts to ac3')
 
-# Check if called from NZBGet
-if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5] < '11.0':
-    #Logger.info("MAIN: Script triggered from NZBGet (11.0 or later).")
+# set config file arguments
+configFilename = os.path.join(os.path.dirname(sys.argv[0]), "mkvdts2ac3.cfg")
 
-    nzbget = True
-    # NZBGet argv: all passed as environment variables.
-    # Exit codes used by NZBGet
-    POSTPROCESS_PARCHECK=92
-    POSTPROCESS_SUCCESS=93
-    POSTPROCESS_ERROR=94
-    POSTPROCESS_NONE=95
+if os.path.isfile(configFilename):
+    config = ConfigParser.SafeConfigParser()
+    config.read(configFilename)
+    defaults = dict(config.items("mkvdts2ac3"))
+    for key in defaults:
+        if key == "verbose":
+            defaults["verbose"] = int(defaults["verbose"])
 
-    # Check nzbget.conf options
-    status = 0
+    parser.set_defaults(**defaults)
 
-    if os.environ['NZBOP_UNPACK'] != 'yes':
-        #Logger.error("Please enable option \"Unpack\" in nzbget configuration file, exiting")
-        sys.exit(POSTPROCESS_ERROR)
+parser.add_argument('fileordir', metavar='FileOrDirectory', nargs='+', help='a file or directory (wildcards may be used)')
 
-    # Check par status
-    if os.environ['NZBPP_PARSTATUS'] == '3':
-        #Logger.warning("Par-check successful, but Par-repair disabled, exiting")
-        sys.exit(POSTPROCESS_NONE)
+parser.add_argument("--aac", help="Also add aac track", action="store_true")
+parser.add_argument("--aacstereo", help="Make aac track stereo instead of 6 channel", action="store_true")
+parser.add_argument("--aaccustom", metavar="TITLE", help="Custom AAC track title")
+parser.add_argument("-c", "--custom", metavar="TITLE", help="Custom AC3 track title")
+parser.add_argument("-d", "--default", help="Mark AC3 track as default", action="store_true")
+parser.add_argument("--destdir", metavar="DIRECTORY", help="Destination Directory")
+parser.add_argument("-e", "--external", action="store_true",
+                    help="Leave AC3 track out of file. Does not modify the original matroska file. This overrides '-n' and '-d' arguments")
+parser.add_argument("-f", "--force", help="Force processing when AC3 track is detected", action="store_true")
+parser.add_argument("--ffmpegpath", metavar="DIRECTORY", help="Path of ffmpeg")
+parser.add_argument("-k", "--keepdts", help="Keep external DTS track (implies '-n')", action="store_true")
+parser.add_argument("--md5", help="check md5 of files before removing the original if destination directory is on a different device than the original file", action="store_true")
+parser.add_argument("--mp4", help="create output in mp4 format", action="store_true")
+parser.add_argument("--mkvtoolnixpath", metavar="DIRECTORY", help="Path of mkvextract, mkvinfo and mkvmerge")
+parser.add_argument("-n", "--nodts", help="Do not retain the DTS track", action="store_true")
+parser.add_argument("--new", help="Do not copy over original. Create new adjacent file", action="store_true")
+parser.add_argument("--no-subtitles", help="Remove subtitles", action="store_true")
+parser.add_argument("-o", "--overwrite", help="Overwrite file if already there. This only applies if destdir or sabdestdir is set", action="store_true")
+parser.add_argument("-p", "--position", choices=['initial', 'last', 'afterdts'], default="last", help="Set position of AC3 track. 'initial' = First track in file, 'last' = Last track in file, 'afterdts' = After the DTS track [default: last]")
+parser.add_argument("-r", "--recursive", help="Recursively descend into directories", action="store_true")
+parser.add_argument("-s", "--compress", metavar="MODE", help="Apply header compression to streams (See mkvmerge's --compression)", default='none')
+parser.add_argument("--sabdestdir", metavar="DIRECTORY", help="SABnzbd Destination Directory")
+parser.add_argument("--stereo", help="Make ac3 track stereo instead of 6 channel", action="store_true")
+parser.add_argument("-t", "--track", metavar="TRACKID", help="Specify alternate DTS track. If it is not a DTS track it will default to the first DTS track found")
+parser.add_argument("--all-tracks", help="Convert all DTS tracks", action="store_true");
+parser.add_argument("-w", "--wd", metavar="FOLDER", help="Specify alternate temporary working directory")
+parser.add_argument("-v", "--verbose", help="Turn on verbose output. Use more v's for more verbosity. -v will output what it is doing. -vv will also output the command that it is running. -vvv will also output the command output", action="count")
+parser.add_argument("-V", "--version", help="Print script version information", action='version', version='%(prog)s ' + version + ' by Drew Thomson')
+parser.add_argument("--test", help="Print commands only, execute nothing", action="store_true")
+parser.add_argument("--debug", help="Print commands and pause before executing each", action="store_true")
 
-    if os.environ['NZBPP_PARSTATUS'] == '1':
-        #Logger.warning("Par-check failed, setting status \"failed\"")
-        status = 1
+args = parser.parse_args()
 
-    # Check unpack status
-    if os.environ['NZBPP_UNPACKSTATUS'] == '1':
-        #Logger.warning("Unpack failed, setting status \"failed\"")
-        status = 1
-
-    if os.environ['NZBPP_UNPACKSTATUS'] == '0' and os.environ['NZBPP_PARSTATUS'] != '2':
-        # Unpack is disabled or was skipped due to nzb-file properties or due to errors during par-check
-
-        for dirpath, dirnames, filenames in os.walk(os.environ['NZBPP_DIRECTORY']):
-            for file in filenames:
-                fileExtension = os.path.splitext(file)[1]
-
-                if fileExtension in ['.rar', '.7z'] or os.path.splitext(fileExtension)[1] in ['.rar', '.7z']:
-                    #Logger.warning("Post-Process: Archive files exist but unpack skipped, setting status \"failed\"")
-                    status = 1
-                    break
-
-                if fileExtension in ['.par2']:
-                    #Logger.warning("Post-Process: Unpack skipped and par-check skipped (although par2-files exist), setting status \"failed\"g")
-                    status = 1
-                    break
-
-        if os.path.isfile(os.path.join(os.environ['NZBPP_DIRECTORY'], "_brokenlog.txt")) and not status == 1:
-            #Logger.warning("Post-Process: _brokenlog.txt exists, download is probably damaged, exiting")
-            status = 1
-
-        #if not status == 1:
-            #Logger.info("Neither archive- nor par2-files found, _brokenlog.txt doesn't exist, considering download successful")
-
-    # Check if destination directory exists (important for reprocessing of history items)
-    if not os.path.isdir(os.environ['NZBPP_DIRECTORY']):
-        #Logger.error("Post-Process: Nothing to post-process: destination directory %s doesn't exist", os.environ['NZBPP_DIRECTORY'])
-        status = 1
-
-    args = parser.parse_args()
-    
-    args.fileordir = [os.environ['NZBPP_DIRECTORY']]
-    
-    if not 'NZBPO_AAC' in os.environ:
-        raise Exception("mkvdts2ac3.py settings not saved")
-        sys.exit(POSTPROCESS_ERROR)
-    
-    if os.environ['NZBPO_AAC'] == 'False':
-        args.aac = False
-    else:
-        args.aac = True
-
-    if os.environ['NZBPO_AACSTEREO'] == 'False':
-        args.aacstereo = False
-    else:
-        args.aacstereo = True
-
-    args.aaccustom = os.environ['NZBPO_AACCUSTOM']
-    
-    args.compress = os.environ['NZBPO_COMPRESS']
-    
-    args.custom = os.environ['NZBPO_CUSTOM']
-    
-    if os.environ['NZBPO_DEFAULT'] == 'False':
-        args.default = False
-    else:
-        args.default = True 
-    
-    args.destdir = os.environ['NZBPO_DESTDIR']
-    
-    if os.environ['NZBPO_EXTERNAL'] == 'False':
-        args.external = False
-    else:
-        args.external = True
-    
-    args.ffmpegpath = os.environ['NZBPO_FFMPEGPATH']
-    
-    if os.environ['NZBPO_FORCE'] == 'False':
-        args.force = False
-    else:
-        args.force = True
-
-    if os.environ['NZBPO_KEEPDTS'] == 'False':
-        args.keepdts = False
-    else:
-        args.keepdts = True
-
-    if os.environ['NZBPO_MDFIVE'] == 'False':
-        args.md5 = False
-    else:
-        args.md5 = True
-        
-    args.mkvtoolnixpath = os.environ['NZBPO_MKVTOOLNIXPATH']
-    
-    if os.environ['NZBPO_NEW'] == 'False':
-        args.new = False
-    else:
-        args.new = True
-
-    if os.environ['NZBPO_NODTS'] == 'False':
-        args.nodts = False
-    else:
-        args.nodts = True
-
-    if os.environ['NZBPO_NO_SUBTITLES'] == 'False':
-        args.no_subtitles = False
-    else:
-        args.no_subtitles = True
-
-    if os.environ['NZBPO_OVERWRITE'] == 'False':
-        args.overwrite = False
-    else:
-        args.overwrite = True
-
-    args.position = os.environ['NZBPO_POSITION']
-
-    args.sabdestdir = 'sab'
-    
-    if os.environ['NZBPO_STEREO'] == 'False':
-        args.stereo = False
-    else:
-        args.stereo = True
-
-    args.track = os.environ['NZBPO_TRACK']
-
-    if os.environ['NZBPO_ALL_TRACKS'] == 'False':
-        args.all_tracks = False
-    else:
-        args.all_tracks = True
-
-    args.wd = os.environ['NZBPO_WD']
-    
-    if os.environ['NZBPO_MPFOUR'] == 'False':
-        args.mp4 = False
-    else:
-        args.mp4 = True
-
-    args.verbose = 3
-    args.recursive = False
-    args.test = False
-    args.debug = False
-
-# NZBGet config done
-
-else:
-    # Check if called form sabnzbd
-    if len(sys.argv) == 8:
-        nzbgroup = sys.argv[6]
-        ppstatus = sys.argv[7]
-        if ppstatus.isdigit():
-            if int(ppstatus) >= 0 and int(ppstatus) <= 3 and "." in nzbgroup:
-                sab = True
-
-    # set config file arguments
-    configFilename = os.path.join(os.path.dirname(sys.argv[0]), "mkvdts2ac3.cfg")
-
-    if os.path.isfile(configFilename):
-        config = ConfigParser.SafeConfigParser()
-        config.read(configFilename)
-        defaults = dict(config.items("mkvdts2ac3"))
-        for key in defaults:
-            if key == "verbose":
-                defaults["verbose"] = int(defaults["verbose"])
-
-        parser.set_defaults(**defaults)
-
-    parser.add_argument('fileordir', metavar='FileOrDirectory', nargs='+', help='a file or directory (wildcards may be used)')
-
-    parser.add_argument("--aac", help="Also add aac track", action="store_true")
-    parser.add_argument("--aacstereo", help="Make aac track stereo instead of 6 channel", action="store_true")
-    parser.add_argument("--aaccustom", metavar="TITLE", help="Custom AAC track title")
-    parser.add_argument("-c", "--custom", metavar="TITLE", help="Custom AC3 track title")
-    parser.add_argument("-d", "--default", help="Mark AC3 track as default", action="store_true")
-    parser.add_argument("--destdir", metavar="DIRECTORY", help="Destination Directory")
-    parser.add_argument("-e", "--external", action="store_true",
-                        help="Leave AC3 track out of file. Does not modify the original matroska file. This overrides '-n' and '-d' arguments")
-    parser.add_argument("-f", "--force", help="Force processing when AC3 track is detected", action="store_true")
-    parser.add_argument("--ffmpegpath", metavar="DIRECTORY", help="Path of ffmpeg")
-    parser.add_argument("-k", "--keepdts", help="Keep external DTS track (implies '-n')", action="store_true")
-    parser.add_argument("--md5", help="check md5 of files before removing the original if destination directory is on a different device than the original file", action="store_true")
-    parser.add_argument("--mp4", help="create output in mp4 format", action="store_true")
-    parser.add_argument("--mkvtoolnixpath", metavar="DIRECTORY", help="Path of mkvextract, mkvinfo and mkvmerge")
-    parser.add_argument("-n", "--nodts", help="Do not retain the DTS track", action="store_true")
-    parser.add_argument("--new", help="Do not copy over original. Create new adjacent file", action="store_true")
-    parser.add_argument("--no-subtitles", help="Remove subtitles", action="store_true")
-    parser.add_argument("-o", "--overwrite", help="Overwrite file if already there. This only applies if destdir or sabdestdir is set", action="store_true")
-    parser.add_argument("-p", "--position", choices=['initial', 'last', 'afterdts'], default="last", help="Set position of AC3 track. 'initial' = First track in file, 'last' = Last track in file, 'afterdts' = After the DTS track [default: last]")
-    parser.add_argument("-r", "--recursive", help="Recursively descend into directories", action="store_true")
-    parser.add_argument("-s", "--compress", metavar="MODE", help="Apply header compression to streams (See mkvmerge's --compression)", default='none')
-    parser.add_argument("--sabdestdir", metavar="DIRECTORY", help="SABnzbd Destination Directory")
-    parser.add_argument("--stereo", help="Make ac3 track stereo instead of 6 channel", action="store_true")
-    parser.add_argument("-t", "--track", metavar="TRACKID", help="Specify alternate DTS track. If it is not a DTS track it will default to the first DTS track found")
-    parser.add_argument("--all-tracks", help="Convert all DTS tracks", action="store_true");
-    parser.add_argument("-w", "--wd", metavar="FOLDER", help="Specify alternate temporary working directory")
-    parser.add_argument("-v", "--verbose", help="Turn on verbose output. Use more v's for more verbosity. -v will output what it is doing. -vv will also output the command that it is running. -vvv will also output the command output", action="count")
-    parser.add_argument("-V", "--version", help="Print script version information", action='version', version='%(prog)s ' + version + ' by Drew Thomson')
-    parser.add_argument("--test", help="Print commands only, execute nothing", action="store_true")
-    parser.add_argument("--debug", help="Print commands and pause before executing each", action="store_true")
-
-    args = parser.parse_args()
-
-    if not args.verbose:
-        args.verbose = 0
+if not args.verbose:
+    args.verbose = 0
 
 def winexe(program):
     if sys.platform == "win32" and not program.endswith(".exe"):
@@ -439,6 +264,7 @@ def doprint(mystr, v=0):
 
 def silentremove(filename):
     try:
+        os.chmod(filename, stat.S_IWRITE )
         os.remove(filename)
     except OSError, e:
         if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
@@ -482,31 +308,18 @@ def runcommand(title, cmdlist):
             if "ffmpeg" in cmdlist[0]:
                 proc = subprocess.Popen(cmdlist, stderr=subprocess.PIPE)
                 line = ''
-                duration_regex = re.compile("  Duration: (\d+:\d\d:\d\d\.\d\d),")
-                progress_regex = re.compile("size= +\d+.*time=(\d+:\d\d:\d\d\.\d\d) bitrate=")
-                duration = False
                 while True:
-                    if not duration:
-                        durationline = proc.stderr.readline()
-                        match = duration_regex.match(durationline)
-                        if match:
-                            duration = getduration(match.group(1))
+                    out = proc.stderr.read(1)
+                    if out == '' and proc.poll() != None:
+                        break
+                    if out != '\r':
+                        line += out
                     else:
-                        out = proc.stderr.read(1)
-                        if out == '' and proc.poll() != None:
-                            break
-                        if out != '\r':
-                            line += out
-                        else:
-                            if 'size= ' in line:
-                                match = progress_regex.search(line)
-                                if match:
-                                    percentage = int(float(getduration(match.group(1)) / float(duration)) * 100)
-                                    if percentage > 100:
-                                        percentage = 100
-                                    sys.stdout.write("\r" + title + str(percentage) + '%')
-                            line = ''
-                        sys.stdout.flush()
+                        if 'size= ' in line:
+                            sys.stdout.write('\r')
+                            sys.stdout.write(line.strip())
+                        line = ''
+                    sys.stdout.flush()
                 print "\r" + title + elapsedstr(cmdstarttime)
             else:
                 proc = subprocess.Popen(cmdlist, stdout=subprocess.PIPE)
@@ -622,8 +435,6 @@ def process(ford):
                     dtstracks.append(trackid)
                 elif ' video (' in line:
                     videotrackid = trackid
-                elif ' audio (A_AC3)' in line or ' audio (AC3' in line:
-                    alreadygotac3 = True
                 if args.track:
                     matchObj = re.match( r'Track ID ' + args.track + r': audio \(A?_?DTS', line)
                     if matchObj:
@@ -634,9 +445,9 @@ def process(ford):
            
             if not dtstracks:
                 doprint("  No DTS tracks found\n", 1)
-            elif alreadygotac3 and not args.force:
-                doprint("  Already has AC3 track\n", 1)
             else:
+                args.total_dts_files += 1
+                args.all_files_affected.append(ford)
                 if not args.all_tracks:
                     dtstracks = dtstracks[0:1]
 
@@ -665,7 +476,11 @@ def process(ford):
                     temptcfile = os.path.join(tempdir, tcfile)
 
                     # get dtstrack info
-                    output = subprocess.check_output([mkvinfo, "--ui-language", "en_US", ford])
+                    try:
+                        output = subprocess.check_output([mkvinfo, "--ui-language", "en", ford])
+                    except subprocess.CalledProcessError as error:
+                        print error
+                        return
                     lines = output.split("\n")
                     dtstrackinfo = []
                     startcount = 0
@@ -684,7 +499,7 @@ def process(ford):
                             break
                         if startcount != 0:
                             dtstrackinfo.append(line)
-                   
+                    
                     # get dts language
                     dtslang = "eng"
                     for line in dtstrackinfo:
@@ -745,7 +560,7 @@ def process(ford):
                     audiochannels = 6
                     if args.stereo:
                         audiochannels = 2
-                    convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", "448k", tempac3file]
+                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", "300k", tempac3file]
                     runcommand(converttitle, convertcmd)
                    
                     if args.aac:
@@ -754,13 +569,13 @@ def process(ford):
                         audiochannels = 6
                         if args.aacstereo:
                             audiochannels = 2
-                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", "448k", tempaacfile]
+                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
                         runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", "448k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", "448k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
                             args.aac = False
@@ -911,8 +726,15 @@ def process(ford):
                             if args.new:
                                 shutil.move(tempnewmkvfile, adjacentmkvfile)
                             else:
-                                silentremove(ford)
+                                tmp_ford = ford + 'tmp'
+                                print 'tmp_move'
+                                print tmp_ford
+                                shutil.move(ford, tmp_ford)
+                                print 'move'
+                                print tempnewmkvfile
+                                print ford
                                 shutil.move(tempnewmkvfile, ford)
+                                silentremove(ford + 'tmp')
 
                 #~ clean up temp folder
                 if not args.test:
@@ -942,7 +764,11 @@ def process(ford):
 
             return files
 
+            
 totalstime = time.time()
+
+args.total_dts_files = 0
+args.all_files_affected = []
 for a in args.fileordir:
     for ford in glob.glob(a):
         files = []
@@ -1005,11 +831,10 @@ for a in args.fileordir:
                             print "MD5's don't match."
                 else:
                     shutil.move(origpath, destpath)
-                   
-if sab or nzbget:
-    sys.stdout.write("mkv dts -> ac3 conversion: " + elapsedstr(totalstime))
-else:
-    doprint("Total Time: " + elapsedstr(totalstime) + "\n", 1)
+
+doprint("Total DTS Files: " + str(args.total_dts_files) + "\n", 1)
+doprint("All files that will be affected: \n " + ','.join(args.all_files_affected) + '\n')
+doprint("Total Time: " + elapsedstr(totalstime) + "\n", 1)
 
 if nzbget:
     sys.exit(POSTPROCESS_SUCCESS)
