@@ -194,7 +194,7 @@ if not args.mkvtoolnixpath or not os.path.exists(mkvmerge):
     mkvmerge = "mkvmerge"
 if not args.mkvtoolnixpath or not os.path.exists(mkvextract):
     mkvextract = "mkvextract"
-   
+
 if args.ffmpegpath:
     ffmpeg = os.path.join(args.ffmpegpath, "ffmpeg")
     ffmpeg = winexe(ffmpeg)
@@ -242,7 +242,7 @@ if missingprereqs:
     if not args.mkvtoolnixpath and not args.ffmpegpath:
         print "\nYou can use --mkvtoolnixpath and --ffmpegpath to specify the path"
     else:
-        print   
+        print
     sys.exit(1)
 
 if not args.verbose:
@@ -287,7 +287,7 @@ def getduration(time):
     (h, m, s) = hms.split(':')
     totalms = int(ms) + (int(s) * 100) + (int(m) * 100 * 60) + (int(h) * 100 * 60 * 60)
     return totalms
-   
+
 def runcommand(title, cmdlist):
     if args.debug:
         raw_input("Press Enter to continue...")
@@ -390,7 +390,7 @@ def process(ford):
         child.communicate()[0]
         if child.returncode == 0:
             starttime = time.time()
-           
+
             # set up temp dir
             tempdir = False
             if args.wd:
@@ -400,10 +400,10 @@ def process(ford):
             else:
                 tempdir = tempfile.mkdtemp()
                 tempdir = os.path.join(tempdir, "mkvdts2ac3")
-               
+
             (dirName, fileName) = os.path.split(ford)
             fileBaseName = os.path.splitext(fileName)[0]
-           
+
             doprint("filename: " + fileName + "\n", 1)
 
             newmkvfile = fileBaseName + '.mkv'
@@ -413,7 +413,7 @@ def process(ford):
             files = []
             if not args.external and not args.mp4:
                 files.append(fileName)
-           
+
             # get dts track id and video track id
             output = subprocess.check_output([mkvmerge, "-i", ford])
             lines = output.split("\n")
@@ -430,9 +430,15 @@ def process(ford):
                     linelist = trackid.split(':')
                     trackid = linelist[0]
                 if ' audio (' in line:
+                    print line
                     audiotracks.append(trackid)
-                if ' audio (A_DTS)' in line or ' audio (DTS' in line:
-                    dtstracks.append(trackid)
+                if (' audio (A_DTS)' in line
+                    or ' audio (DTS' in line
+                    or ' audio (A_TrueHD' in line
+                    or ' audio (TrueHD' in line
+                    or ' audio (A_E-AC-3' in line
+                    or ' audio (E-AC-3' in line):
+                        dtstracks.append(trackid)
                 elif ' video (' in line:
                     videotrackid = trackid
                 if args.track:
@@ -442,7 +448,7 @@ def process(ford):
             if altdtstrackid:
                 dtstracks[:] = []
                 dtstracks.append(altdtstrackid)
-           
+
             if not dtstracks:
                 doprint("  No DTS tracks found\n", 1)
             else:
@@ -499,13 +505,13 @@ def process(ford):
                             break
                         if startcount != 0:
                             dtstrackinfo.append(line)
-                    
+
                     # get dts language
                     dtslang = "eng"
                     for line in dtstrackinfo:
                         if "Language" in line:
                             dtslang = line.split()[-1]
-                   
+
                     # get ac3 track name
                     ac3name = False
                     if args.custom:
@@ -518,7 +524,7 @@ def process(ford):
                                 ac3name = ac3name.replace("dts", "ac3")
                                 if args.stereo:
                                     ac3name = ac3name.replace("5.1", "Stereo")
-                   
+
                     # get aac track name
                     aacname = False
                     if args.aaccustom:
@@ -555,7 +561,7 @@ def process(ford):
                     runcommand(extracttitle, extractcmd)
 
                     # convert DTS to AC3
-                    audio_bitrate = "288k"
+                    audio_bitrate = "640k"
                     converttitle = "  Converting DTS to AC3 [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                     jobnum += 1
                     audiochannels = 6
@@ -563,7 +569,7 @@ def process(ford):
                         audiochannels = 2
                     convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", audio_bitrate, tempac3file]
                     runcommand(converttitle, convertcmd)
-                   
+
                     if args.aac:
                         converttitle = "  Converting DTS to AAC [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                         jobnum += 1
@@ -765,7 +771,7 @@ def process(ford):
 
             return files
 
-            
+
 totalstime = time.time()
 
 args.total_dts_files = 0
@@ -822,7 +828,7 @@ for a in args.fileordir:
                 if args.md5 and (find_mount_point(origpath) != find_mount_point(destpath)):
                     if os.path.exists(destpath) and args.overwrite:
                         shutil.rmtree(destpath)
-                    elif os.path.exists(destpath):   
+                    elif os.path.exists(destpath):
                         print "Directory " + destpath + " already exists"
                     else:
                         shutil.copytree(origpath, destpath)
