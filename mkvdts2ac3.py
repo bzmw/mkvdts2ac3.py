@@ -157,7 +157,7 @@ parser.add_argument("-n", "--nodts", help="Do not retain the DTS track", action=
 parser.add_argument("--new", help="Do not copy over original. Create new adjacent file", action="store_true")
 parser.add_argument("--no-subtitles", help="Remove subtitles", action="store_true")
 parser.add_argument("-o", "--overwrite", help="Overwrite file if already there. This only applies if destdir or sabdestdir is set", action="store_true")
-parser.add_argument("-p", "--position", choices=['initial', 'last', 'afterdts'], default="last", help="Set position of AC3 track. 'initial' = First track in file, 'last' = Last track in file, 'afterdts' = After the DTS track [default: last]")
+parser.add_argument("-p", "--position", choices=['initial', 'last', 'afterdts'], default="initial", help="Set position of AC3 track. 'initial' = First track in file, 'last' = Last track in file, 'afterdts' = After the DTS track [default: initial]")
 parser.add_argument("-r", "--recursive", help="Recursively descend into directories", action="store_true")
 parser.add_argument("-s", "--compress", metavar="MODE", help="Apply header compression to streams (See mkvmerge's --compression)", default='none')
 parser.add_argument("--sabdestdir", metavar="DIRECTORY", help="SABnzbd Destination Directory")
@@ -555,12 +555,13 @@ def process(ford):
                     runcommand(extracttitle, extractcmd)
 
                     # convert DTS to AC3
+                    audio_bitrate = "288k"
                     converttitle = "  Converting DTS to AC3 [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                     jobnum += 1
                     audiochannels = 6
                     if args.stereo:
                         audiochannels = 2
-                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", "288k", tempac3file]
+                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", audio_bitrate, tempac3file]
                     runcommand(converttitle, convertcmd)
                    
                     if args.aac:
@@ -569,13 +570,13 @@ def process(ford):
                         audiochannels = 6
                         if args.aacstereo:
                             audiochannels = 2
-                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
+                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", audio_bitrate, tempaacfile]
                         runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", audio_bitrate, tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", audio_bitrate, tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
                             args.aac = False
