@@ -430,7 +430,6 @@ def process(ford):
                     linelist = trackid.split(':')
                     trackid = linelist[0]
                 if ' audio (' in line:
-                    print line
                     audiotracks.append(trackid)
                 if (' audio (A_DTS)' in line
                     or ' audio (DTS' in line
