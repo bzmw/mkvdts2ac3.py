@@ -560,7 +560,7 @@ def process(ford):
                     audiochannels = 6
                     if args.stereo:
                         audiochannels = 2
-                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", "300k", tempac3file]
+                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", "288k", tempac3file]
                     runcommand(converttitle, convertcmd)
                    
                     if args.aac:
@@ -569,13 +569,13 @@ def process(ford):
                         audiochannels = 6
                         if args.aacstereo:
                             audiochannels = 2
-                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
+                        convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libfaac", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
                         runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "libvo_aacenc", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
-                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", "300k", tempaacfile]
+                            convertcmd = [ffmpeg, "-y", "-i", tempdtsfile, "-acodec", "aac", "-strict", "experimental", "-ac", str(audiochannels), "-ab", "288k", tempaacfile]
                             runcommand(converttitle, convertcmd)
                         if not os.path.isfile(tempaacfile) or os.path.getsize(tempaacfile) == 0:
                             args.aac = False
