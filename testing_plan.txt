@@ -1,0 +1,20 @@
+Combinations to test:
+Single files:
+ - 1 DTS -> 1 DTS, 1 AC3
+ - 1 EAC3 -> 1 EAC3, 1 AC3
+ - 1 AAC -> 1 AAC, 1 AC3
+ - 1 TrueHD -> 1 TrueHD, 1 AC3
+ - 2 AAC -> 2 AAC, 2 AC3
+ - 1 DTS, 1 EAC3 -> 1 DTS, 1 EAC3, 2 AC3
+ - 1 DTS, 1 AC3 -> 1 DTS, 2 AC3
+ - 1 DTS, 2 AC3 -> 1 DTS, 3 AC3
+
+Folders:
+ - 1 file
+ - 2 files of the same video and audio
+ - 2 files with different video and audio
+ - 1 HUGE folder 40+ videos.
+
+Ensure subtitles, are copied. single subtitle track, multiple subtitle tracks
+
+Ensure h264 and h265 are copied the same (shouldn't be any difference)
