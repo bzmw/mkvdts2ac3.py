@@ -1,3 +1,5 @@
+Forked from dcthomson/mkvdts2ac3.py and taken to surgery to fit my very specific needs.
+
 `ac3.py` is a python script for linux, windows or os x which can be used
 for duplicating any audio track and converting it into AC3.
 
