@@ -1,31 +1,5 @@
 #!/usr/bin/env python
 
-#Copyright (C) 2012  Drew Thomson
-#
-#This program is free software: you can redistribute it and/or modify
-#it under the terms of the GNU General Public License as published by
-#the Free Software Foundation, either version 3 of the License, or
-#(at your option) any later version.
-#
-#This program is distributed in the hope that it will be useful,
-#but WITHOUT ANY WARRANTY; without even the implied warranty of
-#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#GNU General Public License for more details.
-#
-#You should have received a copy of the GNU General Public License
-#along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-##############################################################################
-### NZBGET POST-PROCESSING SCRIPT                                          ###
-
-# Convert the DTS audio in MKV files to AC3.
-#
-# mkvdts2ac3.py is a python script for linux, windows or os x which can be used
-# for converting the DTS in Matroska (MKV) files to AC3. It provides you with a
-# set of options for controlling the resulting file.
-
-##############################################################################
-### OPTIONS                                                                ###
 
 ## These options take an argument.
 
@@ -72,7 +46,7 @@ default=True
 import sys
 
 for arg in sys.argv: 
-    print arg
+    print(arg)
 
 
 import argparse
@@ -83,7 +57,7 @@ import glob
 import re
 import tempfile
 import sys
-import ConfigParser
+import configparser
 import shutil
 import hashlib
 import textwrap
@@ -102,7 +76,7 @@ parser = argparse.ArgumentParser(description='convert matroska (.mkv) video file
 configFilename = os.path.join(os.path.dirname(sys.argv[0]), "mkvdts2ac3.cfg")
 
 if os.path.isfile(configFilename):
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.SafeConfigParser()
     config.read(configFilename)
     defaults = dict(config.items("mkvdts2ac3"))
     for key in defaults:
@@ -185,9 +159,9 @@ if missingprereqs:
     for tool in missinglist:
         sys.stdout.write(tool + " ")
     if not args.mkvtoolnixpath and not args.ffmpegpath:
-        print "\nYou can use --mkvtoolnixpath and --ffmpegpath to specify the path"
+        print("\nYou can use --mkvtoolnixpath and --ffmpegpath to specify the path")
     else:
-        print
+        print()
     sys.exit(1)
 
 if not args.verbose:
@@ -205,13 +179,13 @@ if args.debug and args.verbose == 0:
 
 def doprint(mystr, v=0):
     if args.verbose >= v:
-        sys.stdout.write(mystr)
+        print(mystr)
 
 def silentremove(filename):
     try:
         os.chmod(filename, stat.S_IWRITE )
         os.remove(filename)
-    except OSError, e:
+    except OSError as e:
         if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
             raise # re-raise exception if a different error occured
 
@@ -235,7 +209,7 @@ def getduration(time):
 
 def runcommand(title, cmdlist):
     if args.debug:
-        raw_input("Press Enter to continue...")
+        input("Press Enter to continue...")
     cmdstarttime = time.time()
     if args.verbose >= 1:
         sys.stdout.write(title)
@@ -243,9 +217,9 @@ def runcommand(title, cmdlist):
             cmdstr = ''
             for e in cmdlist:
                 cmdstr += e + ' '
-            print
-            print "    Running command:"
-            print textwrap.fill(cmdstr.rstrip(), initial_indent='      ', subsequent_indent='      ')
+            print()
+            print("    Running command:")
+            print(textwrap.fill(cmdstr.rstrip(), initial_indent='      ', subsequent_indent='      '))
     if not args.test:
         if args.verbose >= 3:
             subprocess.call(cmdlist)
@@ -254,7 +228,7 @@ def runcommand(title, cmdlist):
                 proc = subprocess.Popen(cmdlist, stderr=subprocess.PIPE)
                 line = ''
                 while True:
-                    out = proc.stderr.read(1)
+                    out = proc.stderr.read(1).decode()
                     if out == '' and proc.poll() != None:
                         break
                     if out != '\r':
@@ -265,13 +239,13 @@ def runcommand(title, cmdlist):
                             sys.stdout.write(line.strip())
                         line = ''
                     sys.stdout.flush()
-                print "\r" + title + elapsedstr(cmdstarttime)
+                print("\r" + title + elapsedstr(cmdstarttime))
             else:
                 proc = subprocess.Popen(cmdlist, stdout=subprocess.PIPE)
                 line = ''
                 progress_regex = re.compile("Progress: (\d+%)")
                 while True:
-                    out = proc.stdout.read(1)
+                    out = proc.stdout.read(1).decode()
                     if out == '' and proc.poll() != None:
                         break
                     if out != '\r':
@@ -284,7 +258,7 @@ def runcommand(title, cmdlist):
                                 sys.stdout.write("\r" + title + percentage)
                         line = ''
                     sys.stdout.flush()
-                print "\r" + title + elapsedstr(cmdstarttime)
+                print("\r" + title + elapsedstr(cmdstarttime))
         else:
             subprocess.call(cmdlist, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -295,13 +269,15 @@ def find_mount_point(path):
     return path
 
 def process(fileordirectory):
-    print fileordirectory
+    print("starting process")
+    print(fileordirectory)
     if os.path.isdir(fileordirectory):
         doprint("    Processing dir:  " + fileordirectory + "\n", 3)
         for f in os.listdir(fileordirectory):
             process(os.path.join(fileordirectory, f))
     else:
         doprint("    Processing file: " + fileordirectory + "\n", 3)
+        
         # check if file is an mkv file
         child = subprocess.Popen([mkvmerge, "-i", fileordirectory], stdout=subprocess.PIPE)
         child.communicate()[0]
@@ -318,28 +294,32 @@ def process(fileordirectory):
                 tempdir = tempfile.mkdtemp()
                 tempdir = os.path.join(tempdir, "mkvdts2ac3")
                 
-            print("Temp Directory: " + tempdir)
+            print(("Temp Directory: " + tempdir))
+            
 
             (dirName, fileName) = os.path.split(fileordirectory)
             fileBaseName = os.path.splitext(fileName)[0]
-
             doprint("filename: " + fileName + "\n", 1)
 
             newmkvfile = fileBaseName + '.mkv'
             tempnewmkvfile = os.path.join(tempdir, newmkvfile)
             adjacentmkvfile = os.path.join(dirName, fileBaseName + '.new.mkv')
             files = []
+            
 
             # get dts track id and video track id
-            output = subprocess.check_output([mkvmerge, "-i", fileordirectory])
+            output = subprocess.check_output([mkvmerge, "-i", fileordirectory]).decode()            
             lines = output.split("\n")
+            
             altdtstrackid = False
             videotrackid = False
             alreadygotac3 = False
             audiotracks = []
             dtstracks = []
+            
             for line in lines:
                 linelist = line.split(' ')
+                
                 trackid = False
                 if len(linelist) > 2:
                     trackid = linelist[2]
@@ -361,6 +341,8 @@ def process(fileordirectory):
                     matchObj = re.match( r'Track ID ' + args.track + r': audio \(A?_?DTS', line)
                     if matchObj:
                         altdtstrackid = args.track
+                        
+            
             if altdtstrackid:
                 dtstracks[:] = []
                 dtstracks.append(altdtstrackid)
@@ -369,7 +351,6 @@ def process(fileordirectory):
                 doprint("  No DTS tracks found\n", 1)
             else:
                 dtstracks = [dtstracks[0]]
-                print dtstracks
                 
                 args.total_dts_files += 1
                 args.all_files_affected.append(fileordirectory)
@@ -381,6 +362,8 @@ def process(fileordirectory):
                 jobnum = 1
 
                 dtsinfo = dict()
+                doprint('about to loop through dts tracks')
+                
                 for dtstrackid in dtstracks:
                     dtsfile = fileBaseName + dtstrackid + '.dts'
                     tempdtsfile = os.path.join(tempdir, dtsfile)
@@ -391,13 +374,15 @@ def process(fileordirectory):
 
                     # get dtstrack info
                     try:
-                        output = subprocess.check_output([mkvinfo, "--ui-language", "en", fileordirectory])
+                        output = subprocess.check_output([mkvinfo, "--ui-language", "en", fileordirectory]).decode()
                     except subprocess.CalledProcessError as error:
-                        print error
+                        print(error)
                         return
                     lines = output.split("\n")
                     dtstrackinfo = []
                     startcount = 0
+                    
+                    doprint("loop through all the mkvinfo")
                     for line in lines:
                         match = re.search(r'^\|( *)\+', line)
                         linespaces = startcount
@@ -414,12 +399,14 @@ def process(fileordirectory):
                         if startcount != 0:
                             dtstrackinfo.append(line)
 
+                    doprint("get the dts lang")
                     # get dts language
                     dtslang = "eng"
                     for line in dtstrackinfo:
                         if "Language" in line:
                             dtslang = line.split()[-1]
 
+                    doprint("get the ac3 track name")
                     # get ac3 track name
                     ac3name = False
                     for line in dtstrackinfo:
@@ -430,6 +417,7 @@ def process(fileordirectory):
                             if args.stereo:
                                 ac3name = ac3name.replace("5.1", "Stereo")
 
+                    doprint("extract time codes")
                     # extract timecodes
                     tctitle = "  Extracting Timecodes  [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                     jobnum += 1
@@ -446,12 +434,14 @@ def process(fileordirectory):
                                 break
                         fp.close()
 
+                    doprint("extract dts track")
                     # extract dts track
                     extracttitle = "  Extracting DTS track  [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                     jobnum += 1
                     extractcmd = [mkvextract, "tracks", fileordirectory, dtstrackid + ':' + tempdtsfile]
                     runcommand(extracttitle, extractcmd)
 
+                    doprint("convert DTS to AC3")
                     # convert DTS to AC3
                     audio_bitrate = "640k"
                     converttitle = "  Converting DTS to AC3 [" + str(jobnum) + "/" + str(totaljobs) + "]..."
@@ -462,6 +452,7 @@ def process(fileordirectory):
                     convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", audio_bitrate, tempac3file]
                     runcommand(converttitle, convertcmd)
                     
+                    doprint("save info about current DTS track")
                     # Save information about current DTS track
                     dtsinfo[dtstrackid] = {
                       'dtsfile': tempdtsfile,
@@ -471,6 +462,8 @@ def process(fileordirectory):
                       'ac3name': ac3name,
                       'delay': delay
                     }
+                    
+                doprint("Re-re-re-remux")
                 # remux
                 remuxtitle = "  Remuxing AC3 into MKV [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                 jobnum += 1
@@ -546,12 +539,12 @@ def process(fileordirectory):
                         shutil.move(tempnewmkvfile, adjacentmkvfile)
                     else:
                         tmp_fileordirectory = fileordirectory + 'tmp'
-                        print 'tmp_move'
-                        print tmp_fileordirectory
+                        print('tmp_move')
+                        print(tmp_fileordirectory)
                         shutil.move(fileordirectory, tmp_fileordirectory)
-                        print 'move'
-                        print tempnewmkvfile
-                        print fileordirectory
+                        print('move')
+                        print(tempnewmkvfile)
+                        print(fileordirectory)
                         shutil.move(tempnewmkvfile, fileordirectory)
                         silentremove(fileordirectory + 'tmp')
 
@@ -570,15 +563,15 @@ def process(fileordirectory):
                 doprint("  " + fileName + " finished in: " + str(minutes) + " minutes " + str(seconds) + " seconds\n", 1)
 
             return files
-
+            
 
 totalstime = time.time()
 
 args.total_dts_files = 0
 args.all_files_affected = []
 for fileordirectory in args.fileordir:
-    print fileordirectory
-    print os.path.isdir(fileordirectory)
+    print(fileordirectory)
+    print(os.path.isdir(fileordirectory))
     files = []
     if os.path.isdir(fileordirectory):
         for f in os.listdir(fileordirectory):
@@ -601,7 +594,7 @@ for fileordirectory in args.fileordir:
                         silentremove(destfile)
                         shutil.move(origfile, destfile)
                     else:
-                        print "File " + destfile + " already exists"
+                        print("File " + destfile + " already exists")
                 else:
                     shutil.move(origfile, destfile)
         else:
@@ -614,4 +607,4 @@ doprint("Total Time: " + elapsedstr(totalstime) + "\n", 1)
 
 
 # wait for enter, otherwise we'll just close on exit
-raw_input()
+input()
