@@ -107,6 +107,8 @@ parser.add_argument("--debug", help="Print commands and pause before executing e
 
 args = parser.parse_args()
 
+args.verbose = 3
+
 if not args.verbose:
     args.verbose = 0
 
@@ -164,18 +166,6 @@ if missingprereqs:
         print()
     sys.exit(1)
 
-if not args.verbose:
-    args.verbose = 0
-
-if args.verbose < 2 and (args.test or args.debug):
-    args.verbose = 2
-
-if sab:
-    args.fileordir = [args.fileordir[0]]
-    args.verbose = 3
-
-if args.debug and args.verbose == 0:
-    args.verbose = 1
 
 def doprint(mystr, v=0):
     if args.verbose >= v:
@@ -208,6 +198,7 @@ def getduration(time):
     return totalms
 
 def runcommand(title, cmdlist):
+    print('running command: %s %s' % (title, cmdlist))
     if args.debug:
         input("Press Enter to continue...")
     cmdstarttime = time.time()
