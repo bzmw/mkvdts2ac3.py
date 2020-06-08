@@ -6,7 +6,7 @@ import sys
 def show_exception_and_exit(exc_type, exc_value, tb):
     import traceback
     traceback.print_exception(exc_type, exc_value, tb)
-    input("Press key to exit.")
+    input("THERE WAS AN ERROR. Press key to exit.")
     sys.exit(-1)
 
 sys.excepthook = show_exception_and_exit
