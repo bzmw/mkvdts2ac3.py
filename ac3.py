@@ -313,9 +313,6 @@ def process(fileordirectory):
             alreadygotac3 = False
             audiotracks = []
             dtstracks = []
-
-            print("lines")
-            print(lines)
             
             for line in lines:
                 linelist = line.split(' ')
