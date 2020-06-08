@@ -1,6 +1,16 @@
 #!/usr/bin/env python
 
 
+import sys
+
+def show_exception_and_exit(exc_type, exc_value, tb):
+    import traceback
+    traceback.print_exception(exc_type, exc_value, tb)
+    input("Press key to exit.")
+    sys.exit(-1)
+
+sys.excepthook = show_exception_and_exit
+
 ## These options take an argument.
 
 # NZBGet destination directory
@@ -26,9 +36,6 @@ default=True
 
 # Overwrite file if already there (True, False).
 #overwrite=False
-
-# Make ac3 track stereo instead of 6 channel (True, False).
-#stereo=False
 
 # Specify alternate DTS track. If it is not a DTS track it will default to the first DTS track found
 #track=
@@ -97,7 +104,6 @@ parser.add_argument("--new", help="Do not copy over original. Create new adjacen
 parser.add_argument("-o", "--overwrite", help="Overwrite file if already there. This only applies if destdir or sabdestdir is set", action="store_true")
 parser.add_argument("-s", "--compress", metavar="MODE", help="Apply header compression to streams (See mkvmerge's --compression)", default='none')
 parser.add_argument("--sabdestdir", metavar="DIRECTORY", help="SABnzbd Destination Directory")
-parser.add_argument("--stereo", help="Make ac3 track stereo instead of 6 channel", action="store_true")
 parser.add_argument("-t", "--track", metavar="TRACKID", help="Specify alternate DTS track. If it is not a DTS track it will default to the first DTS track found")
 parser.add_argument("-w", "--wd", metavar="FOLDER", help="Specify alternate temporary working directory")
 parser.add_argument("-v", "--verbose", help="Turn on verbose output. Use more v's for more verbosity. -v will output what it is doing. -vv will also output the command that it is running. -vvv will also output the command output", action="count")
@@ -307,6 +313,9 @@ def process(fileordirectory):
             alreadygotac3 = False
             audiotracks = []
             dtstracks = []
+
+            print("lines")
+            print(lines)
             
             for line in lines:
                 linelist = line.split(' ')
@@ -324,6 +333,7 @@ def process(fileordirectory):
                     or ' audio (TrueHD' in line
                     or ' audio (AAC' in line
                     or ' audio (A_E-AC-3' in line
+                    or ' audio (FLAC' in line
                     or ' audio (E-AC-3' in line):
                         dtstracks.append(trackid)
                 elif ' video (' in line:
@@ -405,8 +415,6 @@ def process(fileordirectory):
                             ac3name = line.split("+ Name: ")[-1]
                             ac3name = ac3name.replace("DTS", "AC3")
                             ac3name = ac3name.replace("dts", "ac3")
-                            if args.stereo:
-                                ac3name = ac3name.replace("5.1", "Stereo")
 
                     doprint("extract time codes")
                     # extract timecodes
@@ -432,15 +440,24 @@ def process(fileordirectory):
                     extractcmd = [mkvextract, "tracks", fileordirectory, dtstrackid + ':' + tempdtsfile]
                     runcommand(extracttitle, extractcmd)
 
-                    doprint("convert DTS to AC3")
-                    # convert DTS to AC3
+                    doprint("convert Audio to AC3")
+                    # convert Audio to AC3
                     audio_bitrate = "640k"
-                    converttitle = "  Converting DTS to AC3 [" + str(jobnum) + "/" + str(totaljobs) + "]..."
+                    converttitle = "  Converting Audio to AC3 [" + str(jobnum) + "/" + str(totaljobs) + "]..."
                     jobnum += 1
                     audiochannels = 6
-                    if args.stereo:
-                        audiochannels = 2
-                    convertcmd = [ffmpeg, "-y", "-v", "info", "-i", tempdtsfile, "-acodec", "ac3", "-ac", str(audiochannels), "-ab", audio_bitrate, tempac3file]
+                    convertcmd = [
+                        ffmpeg, 
+                        "-y", 
+                        "-v", 
+                        "info", 
+                        "-i", tempdtsfile, 
+                        "-acodec", "ac3", 
+                        "-ac", str(audiochannels), 
+                        "-ab", audio_bitrate,
+                        "-ar", "48000",
+                        "-filter", "channelmap=channel_layout=5.1", 
+                        tempac3file]
                     runcommand(converttitle, convertcmd)
                     
                     doprint("save info about current DTS track")
@@ -565,8 +582,9 @@ for fileordirectory in args.fileordir:
     print(os.path.isdir(fileordirectory))
     files = []
     if os.path.isdir(fileordirectory):
-        for f in os.listdir(fileordirectory):
-            process(os.path.join(fileordirectory, f))
+        for cur_path, directories, files in os.walk(fileordirectory):
+            for file in files:
+                process(os.path.join(fileordirectory, cur_path, file))
     else:
         files = process(fileordirectory)
     destdir = False
