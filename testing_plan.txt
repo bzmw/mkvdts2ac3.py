@@ -10,7 +10,7 @@ Features:
  - Chapters, are copied
  - Sample rate is 48000
  - New AC3 Track is second
- 
+
 ## Testing cases:
 
 Combinations to test:
@@ -31,3 +31,5 @@ Folders:
  - 1 HUGE folder 10 videos.
  - Nested Folders
 
+TODO: Should convert all tracks. Example: Scrubs Season 8.
+TODO: Make sure it all happens on one drive

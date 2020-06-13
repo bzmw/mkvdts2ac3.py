@@ -22,6 +22,9 @@ sys.excepthook = show_exception_and_exit
 # Mark AC3 track as default (True, False).
 default=True
 
+# The temporary directory to store files in.
+TEMP_DIR = "T:/TEMP_DIR"
+
 # Path of ffmpeg (if not in path)
 #ffmpegpath=
 
@@ -36,9 +39,6 @@ default=True
 
 # Overwrite file if already there (True, False).
 #overwrite=False
-
-# Specify alternate DTS track. If it is not a DTS track it will default to the first DTS track found
-#track=
 
 # Specify alternate temporary working directory
 #wd=
@@ -288,7 +288,7 @@ def process(fileordirectory):
                 if not os.path.exists(tempdir):
                     os.makedirs(tempdir)
             else:
-                tempdir = tempfile.mkdtemp()
+                tempdir = tempfile.mkdtemp(dir=TEMP_DIR)
                 tempdir = os.path.join(tempdir, "mkvdts2ac3")
                 
             print(("Temp Directory: " + tempdir))
@@ -308,7 +308,6 @@ def process(fileordirectory):
             output = subprocess.check_output([mkvmerge, "-i", fileordirectory]).decode()            
             lines = output.split("\n")
             
-            altdtstrackid = False
             videotrackid = False
             alreadygotac3 = False
             audiotracks = []
@@ -335,20 +334,11 @@ def process(fileordirectory):
                         dtstracks.append(trackid)
                 elif ' video (' in line:
                     videotrackid = trackid
-                if args.track:
-                    matchObj = re.match( r'Track ID ' + args.track + r': audio \(A?_?DTS', line)
-                    if matchObj:
-                        altdtstrackid = args.track
                         
-            
-            if altdtstrackid:
-                dtstracks[:] = []
-                dtstracks.append(altdtstrackid)
 
             if not dtstracks:
                 doprint("  No DTS tracks found\n", 1)
             else:
-                dtstracks = [dtstracks[0]]
                 
                 args.total_dts_files += 1
                 args.all_files_affected.append(fileordirectory)
@@ -410,8 +400,9 @@ def process(fileordirectory):
                     for line in dtstrackinfo:
                         if "+ Name: " in line:
                             ac3name = line.split("+ Name: ")[-1]
-                            ac3name = ac3name.replace("DTS", "AC3")
-                            ac3name = ac3name.replace("dts", "ac3")
+                            ac3name = "AC3 Conversion of: " + ac3name
+                    if not ac3name:
+                        ac3name = "AC3 Conversion"
 
                     doprint("extract time codes")
                     # extract timecodes
@@ -452,8 +443,7 @@ def process(fileordirectory):
                         "-acodec", "ac3", 
                         "-ac", str(audiochannels), 
                         "-ab", audio_bitrate,
-                        "-ar", "48000",
-                        "-filter", "channelmap=channel_layout=5.1", 
+                        "-ar", "48000", 
                         tempac3file]
                     runcommand(converttitle, convertcmd)
                     
