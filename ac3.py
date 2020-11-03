@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#! python3
 
 
 import sys
@@ -33,9 +33,6 @@ TEMP_DIR = "T:/TEMP_DIR"
 
 # Path of mkvextract, mkvinfo and mkvmerge (if not in path)
 #mkvtoolnixpath=
-
-# Do not copy over original. Create new adjacent file (True, False).
-#new=False
 
 # Overwrite file if already there (True, False).
 #overwrite=False
@@ -113,6 +110,7 @@ parser.add_argument("--debug", help="Print commands and pause before executing e
 
 args = parser.parse_args()
 
+args.new = True
 args.verbose = 3
 
 if not args.verbose:
@@ -305,7 +303,8 @@ def process(fileordirectory):
             
 
             # get dts track id and video track id
-            output = subprocess.check_output([mkvmerge, "-i", fileordirectory]).decode()            
+            output = subprocess.check_output([mkvmerge, "-i", fileordirectory]).decode()
+            doprint(output)            
             lines = output.split("\n")
             
             videotrackid = False
@@ -330,11 +329,11 @@ def process(fileordirectory):
                     or ' audio (AAC' in line
                     or ' audio (A_E-AC-3' in line
                     or ' audio (FLAC' in line
+                    or ' audio (A_MS/ACM' in line
                     or ' audio (E-AC-3' in line):
                         dtstracks.append(trackid)
                 elif ' video (' in line:
                     videotrackid = trackid
-                        
 
             if not dtstracks:
                 doprint("  No DTS tracks found\n", 1)
@@ -364,7 +363,7 @@ def process(fileordirectory):
                     try:
                         output = subprocess.check_output([mkvinfo, "--ui-language", "en", fileordirectory]).decode()
                     except subprocess.CalledProcessError as error:
-                        print(error)
+                        doprint(error)
                         return
                     lines = output.split("\n")
                     dtstrackinfo = []
@@ -530,7 +529,9 @@ def process(fileordirectory):
 
                 if not args.test:
                     #~ replace old mkv with new mkv
+                    doprint(f"args.new {args.new}")
                     if args.new:
+                        doprint("creating new")
                         shutil.move(tempnewmkvfile, adjacentmkvfile)
                     else:
                         tmp_fileordirectory = fileordirectory + 'tmp'
